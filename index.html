@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Counterfeit Coin Scale Puzzle</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-yellow-50 min-h-screen">
+<div class="max-w-2xl mx-auto p-4">
+  <h1 class="text-3xl font-bold text-yellow-900 mb-2 flex items-center gap-2">
+    ⚖️ Counterfeit Coin Scale Puzzle
+  </h1>
+  <p class="text-gray-500 mb-4 text-sm">1枚だけ軽い偽コインをてんびんで見つけよう。最少手数を目指せ！</p>
+
+  <!-- Difficulty -->
+  <div class="flex gap-3 mb-6">
+    <button onclick="startGame(3)" id="d3" class="px-4 py-2 rounded-full font-semibold text-sm bg-green-600 text-white" aria-label="Easy: 3枚">Easy (3枚)</button>
+    <button onclick="startGame(9)" id="d9" class="px-4 py-2 rounded-full font-semibold text-sm bg-gray-200 text-gray-700" aria-label="Medium: 9枚">Medium (9枚)</button>
+    <button onclick="startGame(12)" id="d12" class="px-4 py-2 rounded-full font-semibold text-sm bg-gray-200 text-gray-700" aria-label="Hard: 12枚">Hard (12枚)</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="flex gap-4 mb-4 text-sm">
+    <span class="bg-white rounded-lg px-3 py-1 shadow-sm">計量回数: <strong id="weighCount">0</strong></span>
+    <span class="bg-white rounded-lg px-3 py-1 shadow-sm">最少可能: <strong id="minWeighs">-</strong></span>
+  </div>
+
+  <!-- Coins Pool -->
+  <div class="bg-white rounded-2xl shadow-md p-5 mb-4">
+    <p class="text-sm font-medium text-gray-600 mb-3">コインプール（クリックで左/右トレイへ追加）</p>
+    <div id="coinPool" class="flex flex-wrap gap-2 min-h-12"></div>
+  </div>
+
+  <!-- Scale -->
+  <div class="bg-white rounded-2xl shadow-md p-5 mb-4">
+    <div class="flex gap-4">
+      <div class="flex-1">
+        <p class="text-sm font-medium text-gray-600 mb-2 text-center">左トレイ</p>
+        <div id="leftTray" onclick="setTarget('left')" class="min-h-16 border-2 border-blue-300 rounded-xl p-3 flex flex-wrap gap-2 cursor-pointer bg-blue-50 hover:bg-blue-100 transition" role="button" aria-label="左トレイ"></div>
+      </div>
+      <div class="flex flex-col items-center justify-center px-2">
+        <div id="scaleIndicator" class="text-4xl">⚖️</div>
+        <p id="scaleResult" class="text-xs font-semibold mt-1 text-center w-16"></p>
+      </div>
+      <div class="flex-1">
+        <p class="text-sm font-medium text-gray-600 mb-2 text-center">右トレイ</p>
+        <div id="rightTray" onclick="setTarget('right')" class="min-h-16 border-2 border-orange-300 rounded-xl p-3 flex flex-wrap gap-2 cursor-pointer bg-orange-50 hover:bg-orange-100 transition" role="button" aria-label="右トレイ"></div>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-4 justify-center flex-wrap">
+      <button onclick="weigh()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-5 py-2 rounded-lg transition" aria-label="計量する">計量する ⚖️</button>
+      <button onclick="clearTrays()" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-5 py-2 rounded-lg transition" aria-label="トレイをリセット">トレイクリア</button>
+    </div>
+  </div>
+
+  <!-- Guess -->
+  <div class="bg-white rounded-2xl shadow-md p-5 mb-4">
+    <p class="text-sm font-medium text-gray-600 mb-3">偽コインを特定したら選択してください</p>
+    <div id="guessList" class="flex flex-wrap gap-2 mb-3"></div>
+    <button onclick="submitGuess()" id="guessBtn" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2 rounded-lg transition disabled:opacity-50" disabled aria-label="答えを確定">答えを確定</button>
+  </div>
+
+  <!-- Result Modal -->
+  <div id="result" class="hidden bg-white rounded-2xl shadow-md p-6 text-center">
+    <p id="resultIcon" class="text-5xl mb-3"></p>
+    <p id="resultText" class="text-xl font-bold mb-2"></p>
+    <p id="resultDetail" class="text-gray-600 mb-4"></p>
+    <button onclick="startGame(currentN)" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-5 py-2 rounded-lg transition" aria-label="もう一度">もう一度</button>
+  </div>
+</div>
+
+<script>
+let coins = [];
+let fakeIdx = -1;
+let leftCoins = [];
+let rightCoins = [];
+let weighCount = 0;
+let currentN = 3;
+let targetTray = 'left';
+let selectedGuess = -1;
+let gameOver = false;
+
+const MIN_WEIGHS = { 3: 1, 9: 2, 12: 3 };
+
+function startGame(n) {
+  currentN = n;
+  fakeIdx = Math.floor(Math.random() * n);
+  coins = Array.from({ length: n }, (_, i) => ({ id: i, label: 'C' + (i + 1) }));
+  leftCoins = [];
+  rightCoins = [];
+  weighCount = 0;
+  selectedGuess = -1;
+  gameOver = false;
+  targetTray = 'left';
+
+  [3, 9, 12].forEach(x => {
+    const btn = document.getElementById('d' + x);
+    const colors = { 3: 'bg-green-600', 9: 'bg-yellow-500', 12: 'bg-red-600' };
+    btn.className = 'px-4 py-2 rounded-full font-semibold text-sm ' + (x === n ? colors[x] + ' text-white' : 'bg-gray-200 text-gray-700');
+  });
+
+  document.getElementById('weighCount').textContent = '0';
+  document.getElementById('minWeighs').textContent = MIN_WEIGHS[n];
+  document.getElementById('scaleIndicator').textContent = '⚖️';
+  document.getElementById('scaleResult').textContent = '';
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('guessBtn').disabled = true;
+  render();
+}
+
+function setTarget(tray) {
+  targetTray = tray;
+  document.getElementById('leftTray').style.outline = tray === 'left' ? '3px solid #3b82f6' : '';
+  document.getElementById('rightTray').style.outline = tray === 'right' ? '3px solid #f97316' : '';
+}
+
+function addCoinToTray(coinId) {
+  if (gameOver) return;
+  const coin = coins.find(c => c.id === coinId);
+  if (!coin) return;
+  if (leftCoins.find(c => c.id === coinId) || rightCoins.find(c => c.id === coinId)) {
+    // remove from tray
+    leftCoins = leftCoins.filter(c => c.id !== coinId);
+    rightCoins = rightCoins.filter(c => c.id !== coinId);
+  } else {
+    if (targetTray === 'left') leftCoins.push(coin);
+    else rightCoins.push(coin);
+  }
+  renderTrays();
+}
+
+function clearTrays() {
+  leftCoins = [];
+  rightCoins = [];
+  renderTrays();
+  document.getElementById('scaleIndicator').textContent = '⚖️';
+  document.getElementById('scaleResult').textContent = '';
+}
+
+function weigh() {
+  if (gameOver) return;
+  if (leftCoins.length === 0 || rightCoins.length === 0) {
+    alert('両トレイにコインを置いてください');
+    return;
+  }
+  weighCount++;
+  document.getElementById('weighCount').textContent = weighCount;
+
+  const leftFake = leftCoins.some(c => c.id === fakeIdx);
+  const rightFake = rightCoins.some(c => c.id === fakeIdx);
+
+  let result, icon;
+  if (!leftFake && !rightFake) {
+    result = 'つり合い ＝ (偽コインはプールに残っています)';
+    icon = '⚖️';
+  } else if (leftFake) {
+    result = '左が軽い ←';
+    icon = '↙️';
+  } else {
+    result = '右が軽い →';
+    icon = '↘️';
+  }
+
+  document.getElementById('scaleIndicator').textContent = icon;
+  document.getElementById('scaleResult').textContent = result;
+  document.getElementById('scaleResult').className = 'text-xs font-semibold mt-1 text-center w-16 ' +
+    (leftFake ? 'text-blue-600' : rightFake ? 'text-orange-600' : 'text-gray-600');
+}
+
+function selectGuess(id) {
+  if (gameOver) return;
+  selectedGuess = id;
+  document.getElementById('guessBtn').disabled = false;
+  renderGuessPanel();
+}
+
+function submitGuess() {
+  if (selectedGuess === -1 || gameOver) return;
+  gameOver = true;
+  const correct = selectedGuess === fakeIdx;
+  const minW = MIN_WEIGHS[currentN];
+  const optimal = weighCount <= minW;
+
+  const resultEl = document.getElementById('result');
+  resultEl.classList.remove('hidden');
+  document.getElementById('resultIcon').textContent = correct ? (optimal ? '🏆' : '✅') : '❌';
+  document.getElementById('resultText').textContent = correct ? (optimal ? '最少手数でクリア！' : '正解！') : '不正解...';
+  document.getElementById('resultDetail').textContent =
+    '偽コイン: C' + (fakeIdx + 1) + ' ／ 計量回数: ' + weighCount + '回 ／ 最少可能: ' + minW + '回';
+}
+
+function render() {
+  renderPool();
+  renderTrays();
+  renderGuessPanel();
+}
+
+function renderPool() {
+  const pool = document.getElementById('coinPool');
+  pool.innerHTML = '';
+  coins.forEach(coin => {
+    const inLeft = leftCoins.find(c => c.id === coin.id);
+    const inRight = rightCoins.find(c => c.id === coin.id);
+    const btn = document.createElement('button');
+    btn.className = 'w-10 h-10 rounded-full font-bold text-sm border-2 transition flex-shrink-0 ' +
+      (inLeft ? 'bg-blue-400 border-blue-600 text-white' :
+       inRight ? 'bg-orange-400 border-orange-600 text-white' :
+       'bg-yellow-200 border-yellow-500 text-yellow-900 hover:bg-yellow-300');
+    btn.textContent = coin.label;
+    btn.setAttribute('aria-label', coin.label + 'をトレイに追加');
+    btn.onclick = () => addCoinToTray(coin.id);
+    pool.appendChild(btn);
+  });
+}
+
+function renderTrays() {
+  const render = (tray, coins_) => {
+    tray.innerHTML = '';
+    coins_.forEach(coin => {
+      const el = document.createElement('span');
+      el.className = 'w-10 h-10 rounded-full font-bold text-sm border-2 flex items-center justify-center bg-yellow-200 border-yellow-500 text-yellow-900 flex-shrink-0';
+      el.textContent = coin.label;
+      tray.appendChild(el);
+    });
+  };
+  render(document.getElementById('leftTray'), leftCoins);
+  render(document.getElementById('rightTray'), rightCoins);
+}
+
+function renderGuessPanel() {
+  const panel = document.getElementById('guessList');
+  panel.innerHTML = '';
+  coins.forEach(coin => {
+    const btn = document.createElement('button');
+    btn.className = 'w-10 h-10 rounded-full font-bold text-sm border-2 transition flex-shrink-0 ' +
+      (selectedGuess === coin.id ? 'bg-red-500 border-red-700 text-white' : 'bg-yellow-200 border-yellow-500 text-yellow-900 hover:bg-yellow-300');
+    btn.textContent = coin.label;
+    btn.setAttribute('aria-label', coin.label + 'を偽コインとして選択');
+    btn.onclick = () => selectGuess(coin.id);
+    panel.appendChild(btn);
+  });
+}
+
+startGame(3);
+</script>
+</body>
+</html>
